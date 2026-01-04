@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Simple runner for the PEGY Streamlit app (same as run.sh)
+# - creates a virtual environment at ./.venv if missing
+# - installs/updates Python dependencies from requirements.txt
+# - starts Streamlit
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$ROOT_DIR"
+
+echo "Workspace: $ROOT_DIR"
+
+if [ ! -d ".venv" ]; then
+  echo "Creating virtualenv at ./.venv..."
+  python3 -m venv ./.venv
+fi
+
+echo "Activating virtualenv..."
+# shellcheck source=/dev/null
+source ./.venv/bin/activate
+
+echo "Upgrading pip and installing requirements..."
+python -m pip install --upgrade pip setuptools wheel
+pip install -r requirements.txt
+
+echo "Installing python-dotenv..."
+pip install python-dotenv
+
+echo "Starting Streamlit app (pegy.py)..."
+streamlit run pegy.py
