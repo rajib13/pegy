@@ -1,4 +1,5 @@
 from numpy import sort
+import re
 import streamlit as st
 from header import add_header
 from insights import add_insights
@@ -9,20 +10,60 @@ from tickers.snp import symbols as snp_tickers
 # AI summary generators
 from ai import generate_company_summary, get_cached_summary
 
+
 tickers_input, refresh = add_header()
 
-def calculate_and_display_pegy(tickers, category):
-    # Load data
-    with st.spinner("Fetching market data..."):
-        df = calculate_pegy(tickers)
-    
-    # Format and display
-    format_display(df, category)
 
+def _safe_key(label: str) -> str:
+    return re.sub(r"[^0-9A-Za-z_]+", "_", label)
+
+
+def calculate_and_display_pegy(tickers, category):
+    """Lazy-load and display PEGY data for `category`.
+
+    Data is computed only when the user clicks the per-tab Load button and is
+    cached in `st.session_state` under `df_<safe_category>`.
+    """
+    key = f"df_{_safe_key(category)}"
+    load_key = f"load_{_safe_key(category)}"
+
+    # If data already computed for this category, display immediately
+    if key in st.session_state and st.session_state.get(key) is not None:
+        format_display(st.session_state[key], category)
+        return
+
+    # When this function runs, the tab is active — compute now and cache result.
+    with st.spinner("Fetching market data..."):
+        st.session_state[key] = calculate_pegy(tuple(tickers))
+    
+    # Sorting controls: allow selecting column and order (restore previous behavior)
+    df = st.session_state[key]
+    cols = list(df.columns) if hasattr(df, 'columns') else []
+    sort_key = f"sortcol_{_safe_key(category)}"
+    sort_dir_key = f"sortdir_{_safe_key(category)}"
+
+    options = ["PEGY-1Y (abs)"] + cols
+    sel = st.selectbox("Sort by", options, index=0, key=sort_key)
+    order = st.radio("Order", ("Ascending", "Descending"), index=0, horizontal=True, key=sort_dir_key)
+
+    # Apply sorting
+    try:
+        if sel == "PEGY-1Y (abs)" and "PEGY-1Y" in df.columns:
+            df_sorted = df.copy()
+            df_sorted["_abs_pegy"] = df_sorted["PEGY-1Y"].abs()
+            df_sorted = df_sorted.sort_values(by=["_abs_pegy"], ascending=(order == "Ascending"), na_position="last").drop(columns=["_abs_pegy"]).reset_index(drop=True)
+        elif sel in df.columns:
+            df_sorted = df.sort_values(by=[sel], ascending=(order == "Ascending"), na_position="last").reset_index(drop=True)
+        else:
+            df_sorted = df
+    except Exception:
+        df_sorted = df
+
+    format_display(df_sorted, category)
 
 # Parse tickers and show UI controls
 # 0. Watchlist tickers (displayed by default)
-watchlist_tickers = ["PLTR", "RDW", "AVGO", "COST", "INTC", "AMD", "WMT", "V", "DDOG", "SNOW", "COIN", "RDDT", "CRWV"]
+watchlist_tickers = ["ONDS", "OSCR", "PLTR", "RDW", "AVGO", "COST", "INTC", "AMD", "WMT", "V", "DDOG", "SNOW", "COIN", "RDDT", "CRWV"]
 
 # Pre-defined groups
 mags_tickers = ["AAPL", "AMZN", "ASML", "GOOGL", "META", "MSFT", "NFLX", "NVDA", "ORCL", "TSLA", "TSM"]
